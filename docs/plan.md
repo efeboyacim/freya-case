@@ -9,7 +9,7 @@ Kaynak: [spec.md](spec.md). Aşamalar sırayla yapılır. Bir aşamanın kabul k
 - `POST /admin/fill {slot_id}`: senaryo 6'da yeri arama sürerken doldurmak için.
 - `tool_log`'u servis kendisi yazar: tool'lara karşılık gelen her istek (confirm_name, verify_dob, list_slots, book_appointment, close_call, no_answer) kaydedilir. Transkript yazımı kaydedilmez.
 
-**Durum:** Aşama 1 ✅ bitti · Aşama 2 ✅ bitti · Aşama 3 ⏳ · Aşama 3b (opsiyonel) ⏳ · Aşama 4 ⏳
+**Durum:** Aşama 1 ✅ bitti · Aşama 2 ✅ bitti · Aşama 3 ✅ bitti · Aşama 3b (opsiyonel) ⏳ · Aşama 4 ⏳
 
 ---
 
@@ -154,7 +154,7 @@ async with CallSession(customer_id, http=None, on_tool=None) as s:
 - **Git Bash notu.** `/fill 1` komut satırı argümanı olarak verilirse Git Bash onu dosya yoluna çeviriyor. CLI'da stdin üzerinden sorun yok.
 - **R2 kapanışı.** Asistan kendini yalnız açılışta tanıtıyor; "kim arıyor?" sorulsa bile tanıtımı tekrarlamıyor. Telefonu başkası açtıysa gerekçe olarak yalnız "Bu konuyu yalnız <müşteri> ile görüşebiliyorum" diyor. Kart ya da teslimat geçmediği için R1 ve R2 korunuyor. Senaryo 2 üç kez koşuldu, üçünde de tutarlı.
 
-## Aşama 3: Ses (OpenAI) — bas-konuş
+## Aşama 3: Ses (OpenAI) — bas-konuş — ✅ BİTTİ
 
 **Dokümandan doğrulananlar (2026-11-18, developers.openai.com/api/docs):**
 - STT: `gpt-transcribe`, `/v1/audio/transcriptions` üzerinden. `gpt-4o-transcribe` ve `gpt-4o-mini-transcribe` deprecated.
@@ -167,11 +167,29 @@ async with CallSession(customer_id, http=None, on_tool=None) as s:
 - STT `prompt`'una bağlam verilir: telefonda kart teslimatı, müşteri adı, "doğum tarihi" ifadesi. Doğum tarihinin kendisi ipucu olarak **verilmez**.
 - `requirements.txt` dosyasına `openai` ve `sounddevice` eklenir. `.env.example` dosyasına `OPENAI_API_KEY=` satırı eklenir.
 
+**Dosyalar**
+```
+voice/
+  audio.py     # Recorder (bas-konuş, 24 kHz mono int16 → WAV), Player (pcm parçalarını sırayla çalar)
+  speech.py    # transcribe(): gpt-transcribe; speak(): gpt-4o-mini-tts pcm streaming, ilk bayt ölçümü
+  main.py      # python -m voice.main --customer N [--reset] [--debug] [--voice] [--input-device]
+  selftest.py  # mikrofonsuz test: müşteri sözü başka TTS sesiyle sentezlenir, STT'ye verilir
+tests/test_voice.py   # WAV başlığı, tepe seviye, STT bağlamında DOB/ilçe olmaması, gecikme toplamı
+```
+
 **Kabul kriterleri**
-- [ ] `python -m voice.main --customer 1` ile senaryo 1 mikrofonla baştan sona konuşuluyor ve DB'de `booked` yazılıyor.
-- [ ] Türkçe isimler ve tarihler doğru yazıya dökülüyor. Örnek: "14 Mart 1988" doğrulamayı geçiyor.
-- [ ] Her turun gecikmesi (STT, LLM, TTS ilk ses baytı ayrı ayrı) terminale basılıyor.
-- [ ] Commit: `stage 3: voice`
+- [x] `python -m voice.main --customer 1` ile senaryo 1 mikrofonla baştan sona konuşuluyor ve DB'de `booked` yazılıyor. Kullanıcı mikrofonla denedi, çalıştı. Ayrıca mikrofonsuz eşdeğeri de geçti: `python -m voice.selftest call` sentezlenmiş müşteri sesiyle senaryo 1'i STT → ajan → TTS üzerinden konuştu, DB'de `booked`, Perşembe kalan 0, tool_log `confirm_name → verify_dob → list_slots → book_appointment:201 → close_call`. Mikrofon 24 kHz'de açılıyor, hoparlörden çalma çalışıyor (duman testi).
+- [x] Türkçe isimler ve tarihler doğru yazıya dökülüyor (`python -m voice.selftest stt`). "On dört Mart bin dokuz yüz seksen sekiz" → `verify_dob("14.03.1988")` → 200. "Otuz Ağustos doksan" ilk denemede "Otuz As" çıktı; ay adları `keywords`'e eklenince düzeldi.
+- [x] Her turun gecikmesi basılıyor: `[gecikme] STT · LLM · TTS ilk bayt · söz bitti→ilk ses`, arama sonunda ortalama/medyan/en çok. Senaryo 1 ölçümü (5 müşteri turu): STT ort 0.57 sn, LLM ort 2.47 sn (en çok 3.98, `list_slots` turu), TTS ilk bayt ort 0.63 sn, söz bitti→ilk ses ort 3.67 sn. Darboğaz LLM; Aşama 3b bunu hedefler.
+- [x] Commit: `stage 3: voice`
+
+**Uygulamada verilen ek kararlar:**
+- **Dil alanı.** `gpt-transcribe` için `language` değil `languages=["tr"]` gönderiliyor (doküman ve openai 3.55.1 imzası). `prompt` ve `keywords` da SDK'de doğrudan parametre.
+- **STT bağlamı.** `prompt`: konu (kart teslimatı), müşteri adı, "doğum tarihi gün/ay/yıl söylenebilir". `keywords`: müşteri adı, Perşembe, Cuma, 12 ay adı. Doğum tarihi ve ilçe verilmez; `tests/test_voice.py` bunu kontrol ediyor.
+- **Ses.** Asistan `marin`, selftest'teki müşteri `cedar`. `TTS_VOICE`, `STT_MODEL`, `TTS_MODEL` ortam değişkenleriyle değiştirilebilir.
+- **Sessiz kayıt.** 0.3 sn'den kısa ya da tepe seviyesi 0.01'in altındaki kayıt STT'ye gönderilmez; boş STT sonucu ajana gönderilmez.
+- **Metinle deneme.** İstemde Enter yerine metin yazılırsa STT atlanır, cevap yine seslendirilir. `/fill` ve `/kapat` CLI'daki gibi.
+- **Kapanan hat.** `/kapat` sonrası asistanın ürettiği metin seslendirilmez, yalnız "(hat kapalı, okunmadı)" diye basılır. İlk denemede bu metin hoparlörden okunuyordu.
 
 ## Aşama 3b (opsiyonel, süre kalırsa): Streaming STT, semantic endpointing, streaming TTS
 Spec'teki bas-konuş tasarımının üstüne eklenir, onun yerine geçmez (`--stream` bayrağı). Yapılırsa spec.md'deki `voice` satırına eklenir.
@@ -192,14 +210,45 @@ Spec'teki bas-konuş tasarımının üstüne eklenir, onun yerine geçmez (`--st
 - [ ] Gecikme basılıyor: konuşma bitişinden `commit`'e, LLM'in ilk cümlesine ve TTS'in ilk ses baytına kadar. Bas-konuş moduyla karşılaştırma `eval/findings.md` dosyasına not ediliyor.
 - [ ] Commit: `stage 3b: streaming voice`
 
-## Aşama 4: Eval (simüle müşteriler + DB skoru)
-- `scenarios.py`: 12 senaryo. Her senaryoda customer_id, ön doldurma, persona metni, tetikleyici ve beklenen DB durumu var. Senaryo 6'daki tetikleyici: `list_slots` sonrası `/admin/fill`.
-- `simulator.py`: müşteriyi oynayan Claude. Tool'u yok, persona ile cevap veriyor. Tur sınırı 20.
-- `checks.py`: deterministik kontroller DB'den okunur (outcome, randevu sayısı, kapasite ≥ 0, callback, tool_log sırası). R1, R2, R5 ve R8, DB'deki transkript üzerinden Claude hakemle evet/hayır olarak kontrol edilir.
-- `run.py`: her senaryo için reset → arama → kontroller. 12 senaryo × 3 tekrar. Senaryo 12'de LLM çağrılmaz, dialer `no-answer` gönderir.
+## Aşama 4: Eval (simüle müşteriler + DB skoru) ve persona deneyleri
+
+**Amaç:** Asistanı yazılı modda (`CallSession`, ses yok) farklı personalarla konuşturmak, çıkan hataları toplamak ve **sıklık × zarar** puanına göre sıralamak. Düzeltmeler bu sıraya göre yapılır. Süre kısıtlı olduğu için yeni senaryo eklenmez: spec'teki 12 senaryo × 3 tekrar korunur, persona ekseni tekrarların içine yerleştirilir.
+
+**Senaryo ve persona ayrımı**
+- **Senaryo** (`scenarios.py`): *ne olacağını* belirler. customer_id, ön doldurma, müşterinin hedefi (ör. "Perşembe'yi seç", "kartı istemiyorsun"), tetikleyici ve beklenen DB durumu. Senaryo 6'nın tetikleyicisi: `list_slots` sonrası `/admin/fill`.
+- **Persona** (`personas.py`): *nasıl konuşulacağını* belirler. Hedefi değiştirmez, yalnız üslubu değiştirir. 6 persona:
+  1. `isbirlikci`: net ve kısa cevaplar (temel çizgi)
+  2. `tek_kelime`: "evet", "hı hı", "olur"
+  3. `konuskan`: konudan sapar, soruya soruyla cevap verir
+  4. `supheci`: dolandırıcılıktan korkar, "neden doğum tarihimi soruyorsunuz?" der
+  5. `kararsiz`: seçimini değiştirir, onaydan sonra başka yer ister
+  6. `daginik_girdi`: tarihi farklı biçimlerde söyler ("14/3/88", "on dört mart seksen sekiz"), yazım hatası yapar
+- Tekrarlarda persona döner: tekrar *k*, `(senaryo_no + k) mod 6` personasını alır. 36 aramanın her personası 6 kez görünür ve ek arama maliyeti olmaz.
+
+**Dosyalar**
+- `simulator.py`: müşteriyi oynayan Claude, tool'u yok. Prompt'a senaryo hedefi, persona ve müşterinin kendi bilgileri (ad, doğum tarihi) eklenir. Doğum tarihi yalnız müşteri rolüne verilir, asistana verilmez. Müşteri `[KAPAT]` yazarsa `hangup()` çağrılır. Tur sınırı 20. *API ve model adı uygularken dokümandan doğrulanacak.*
+- `checks.py`: her kontrolün sabit bir **zarar** puanı vardır.
+  - 3 (iş ya da güvenlik): yanlış outcome; onaysız ya da fazla randevu; kapasite < 0; doğrulamadan önce kart veya teslimat sözü (R1); başkasına neden söylemek (R2); uydurulan yer veya saat; 201 gelmeden "ayarlandı" demek; aramanın `close_call` olmadan bitmesi ya da hata vermesi.
+  - 2 (kural): eksik R8 hatırlatması; R5 tekrar okumanın eksik olması; callback beklentisine uyulmaması; `tool_log` sırasında sapma.
+  - 1 (üslup): aynı turda birden fazla soru, markdown ya da madde işareti, uzun cevap.
+  - Deterministik kontroller DB'den okunur. R1, R2, R5 ve R8 Claude hakemle transkriptten evet/hayır olarak kontrol edilir. Hakem ayrıca serbest metin olarak "diğer sorunlar" listesi döner (en fazla 3 madde, her birine 1–3 zarar). Beklenmedik hatalar bu listeden çıkar.
+- `run.py`: her arama için sırasıyla reset, arama ve kontroller çalışır. Senaryo 12'de LLM çağrılmaz, dialer `no-answer` gönderir. Aramalar sıralı çalışır, çünkü reset globaldir ve yerler senaryolar arasında paylaşılır. Bayraklar: `--only 1,6`, `--reps N`, `--personas a,b`, `--tag ad`, `--variant broken_r5`.
+
+**Sonuç klasörü:** `eval/runs/<YYYYMMDD-HHMM>[-tag]/`
+- `config.json`: model, effort, prompt'un sha1'i, variant, senaryo ve persona listesi.
+- `results.jsonl`: arama başına bir satır (senaryo, persona, tekrar, outcome, her kontrolün geç/kal sonucu, hakem notları, süre, maliyet).
+- `transcripts/<senaryo>-<persona>-<tekrar>.md`: transkript ve `tool_log`. DB her reset'te silindiği için tek kalıcı kayıt budur.
+- `summary.md`:
+  - senaryo × persona geçme tablosu ve toplam skor;
+  - **hata öncelik tablosu**: hata, sıklık (kaç aramada görüldü / toplam), zarar, öncelik = sıklık × zarar. Tablo büyükten küçüğe sıralanır ve her satır örnek bir transkripte bağlanır.
+
+**Düzeltme döngüsü:** temel çalıştırma → `summary.md`'deki ilk 2–3 hata düzeltilir → aynı ayarla `--tag fix1` ile yeniden çalıştırılır → iki `summary.md` dosyasındaki öncelik tabloları `eval/findings.md` dosyasında karşılaştırılır.
+
+**Süre (yaklaşık 60 dk + koşum):** personalar ve senaryolar (10 dk), simülatör (10 dk), kontroller ve hakem (15 dk), run ve klasör çıktısı (15 dk), küçük deneme `--only 1,2,6 --reps 1` (5 dk), tam koşum (36 arama, tahminen 30–40 dk; arka planda çalışırken düzeltmeler incelenir).
 
 **Kabul kriterleri**
-- [ ] `python -m eval.run` tek komutla çalışıyor. Senaryo bazında geçme oranını ve toplam skoru tablo hâlinde basıyor, sonuçları `eval/results.json` dosyasına yazıyor.
-- [ ] Kasıtlı bozulmuş bir prompt ile skor düşüyor. Bu, kontrollerin gerçekten bir şey ölçtüğünü gösteriyor. Örnek bozulma: R5 onay adımını silmek.
-- [ ] Başarısız kontroller ve bulunan hatalar video için `eval/findings.md` dosyasına not ediliyor.
+- [ ] `python -m eval.run` tek komutla çalışıyor. Skor tablosunu terminale basıyor ve yukarıdaki sonuç klasörünü oluşturuyor.
+- [ ] Her arama için transkript dosyası var. `summary.md` dosyasında sıklık × zarar ile sıralı hata öncelik tablosu var.
+- [ ] `--variant broken_r5` ile (R5 onay adımı silinmiş prompt) skor düşüyor ve R5 hatası öncelik tablosunda üste çıkıyor. Bu, kontrollerin gerçekten bir şey ölçtüğünü gösteriyor.
+- [ ] En az bir düzeltme turu yapıldı. Önceki ve sonraki öncelik tabloları video için `eval/findings.md` dosyasına not edildi.
 - [ ] Commit: `stage 4: eval`
