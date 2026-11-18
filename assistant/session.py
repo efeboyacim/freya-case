@@ -38,6 +38,17 @@ MAX_AGENT_TURNS = 10        # tek müşteri turunda ajan döngüsünün sınır�
 MAX_CUSTOMER_TURNS = 20     # bir aramadaki müşteri turu sınırı
 
 
+R7_LINE = "Sizi gelecek hafta arayacağız."
+
+
+def ensure_r7(reply: str, outcome: str | None) -> str:
+    """R7 güvencesi: no_slot ile kapanan turda müşteri 'gelecek hafta arayacağız' cümlesini mutlaka
+    duyar. Model unutursa sabit cümle yanıtın başına eklenir (kural prompt'a değil koda bağlı)."""
+    if outcome == "no_slot" and "gelecek hafta" not in reply.lower():
+        return f"{R7_LINE} {reply}".strip()
+    return reply
+
+
 class CallFinishedError(RuntimeError):
     """Kapanmış aramaya mesaj gönderildi."""
 
@@ -160,6 +171,10 @@ class CallSession:
         self.customer_turns += 1
         await self._transcript("customer", customer_text)
         reply = await self._turn(customer_text)
+        fixed = ensure_r7(reply, self.outcome)
+        if fixed != reply:
+            await self._transcript("assistant", R7_LINE)   # asistan satırı zaten yazıldı; eki ayrı yaz
+            reply = fixed
         if not self.done and self.customer_turns >= self.max_customer_turns:
             extra = await self._system(TIMEOUT_NOTE)
             reply = " ".join(p for p in (reply, extra) if p)

@@ -1,0 +1,9 @@
+{
+  "name": "20261118-2237-fix3",
+  "model": "claude-sonnet-5-5",
+  "variant": "base",
+  "merged_from": [
+    "20261118-2236-f3a",
+    "20261118-2236-f3b"
+  ]
+}

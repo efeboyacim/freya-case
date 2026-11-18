@@ -152,3 +152,13 @@ def test_prompt_has_name_but_no_service_data():
         assert dob not in prompt and phone not in prompt and district not in prompt
     for _id, _district, _day, time_range, _cap in SLOTS:
         assert time_range not in prompt
+
+
+def test_ensure_r7_adds_next_week_line_only_for_no_slot():
+    from assistant.session import R7_LINE, ensure_r7
+    assert ensure_r7("Hoşça kalın.", "no_slot") == f"{R7_LINE} Hoşça kalın."
+    assert ensure_r7("", "no_slot") == R7_LINE
+    said = "Anladım. Sizi gelecek hafta arayacağız, iyi günler."
+    assert ensure_r7(said, "no_slot") == said
+    assert ensure_r7("İyi günler.", "booked") == "İyi günler."
+    assert ensure_r7("İyi günler.", None) == "İyi günler."

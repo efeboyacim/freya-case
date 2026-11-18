@@ -250,7 +250,7 @@ Spec'teki bas-konuş tasarımının üstüne eklenir, onun yerine geçmez (`--st
 - [x] `python -m eval.run` tek komutla çalışıyor, skor tablosunu basıyor ve sonuç klasörünü oluşturuyor. Tam koşu (36 arama) süre nedeniyle **yarıda kesildi**: taban 19 arama (senaryo 1–3 için 3'er, senaryo 4 için 2, geri kalan senaryolar için 1 tekrar). Senaryo 12 LLM'siz.
 - [x] Her aramanın transkripti `transcripts/` altında. `summary.md` içinde `Öncelik | Sıklık | Açıklama` sütunlu, sıklık × zarar ile sıralı hata tablosu var.
 - [x] `--variant broken_r5`: skor %98,9'dan %94,6'ya düştü, R5 hataları tablonun ilk iki satırı oldu (3/6 ve 2/6). Tabanda 0/19.
-- [x] Düzeltme turu yapıldı (fix1, fix2). Önce/sonra tabloları `eval/findings.md` içinde. **R7 düzeltmesi örneklem küçük olduğu için kanıtlanamadı** (taban 0/2, fix1 1/2, fix2 1/6); bulgular ve açık kalanlar orada.
+- [x] Düzeltme turu yapıldı (fix1, fix2). Önce/sonra tabloları `eval/findings.md` içinde. Prompt ve `next` düzeltmesi R7'yi kapatmadı (taban 0/2, fix1 1/2, fix2 1/6), bu yüzden R7 kodda zorlandı (`session.ensure_r7`, fix3: 0/2, 1 tekrar); bulgular ve açık kalanlar orada.
 - [x] Commit: `stage 4: eval`
 
 **Uygulamada verilen ek kararlar:**
