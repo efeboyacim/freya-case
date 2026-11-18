@@ -55,7 +55,7 @@
 
 ## Bitti tanımı
 - **Servis:** seed yükleniyor. Her endpoint'in 2xx/4xx yolları pytest ile geçiyor. Eşzamanlı book istekleri kapasiteyi aşmıyor.
-- **Tools:** servis hataları LLM'e okunur metin olarak dönüyor. Tool'larda customer_id ya da doğum tarihi parametresi yok.
+- **Tools:** servis hataları LLM'e okunur metin olarak dönüyor. Tool'larda customer_id parametresi yok. Kayıtlı doğum tarihi hiçbir tool yanıtında ya da prompt'ta yok; `verify_dob` yalnız müşterinin söylediği tarihi (`spoken_date`) alır.
 - **Ajan:** metin modunda senaryo 1, 2 ve 6 elle oynanınca DB'deki sonuç doğru.
 - **Ses:** mikrofonla Türkçe 1 tam arama (senaryo 1) yapılabiliyor.
 - **Eval:** `python -m eval.run` 12 senaryo × 3 tekrarı çalıştırıyor ve skor tablosunu basıyor.

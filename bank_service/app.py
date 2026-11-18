@@ -341,7 +341,7 @@ def get_call_detail(call_id: int):
         if call is None:
             return not_found(call_id)
         appt = conn.execute(
-            "SELECT a.id, s.* FROM appointments a JOIN slots s ON s.id = a.slot_id "
+            "SELECT s.* FROM appointments a JOIN slots s ON s.id = a.slot_id "
             "WHERE a.call_id = ?", (call_id,)).fetchone()
         rows = lambda sql: [dict(r) for r in conn.execute(sql, (call_id,)).fetchall()]
         return {

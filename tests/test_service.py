@@ -144,6 +144,14 @@ def test_happy_path_booked(client):
     assert actions == ["confirm_name", "verify_dob", "book_appointment", "close_call"]
 
 
+def test_detail_reports_slot_id_not_appointment_id(client):
+    # İlk randevu (appointment id=1) slot 2'ye yazılır; detay slot_id=2 göstermeli.
+    cid = verified_call(client, AYSE)
+    assert client.post(f"/calls/{cid}/appointments", json={"slot_id": KADIKOY_FRI}).status_code == 201
+    appt = detail(client, cid)["appointment"]
+    assert appt["slot_id"] == KADIKOY_FRI and appt["day"] == "Cuma"
+
+
 def test_slot_full_409_then_other_slot(client):
     cid = verified_call(client, MEHMET)
     client.post("/admin/fill", json={"slot_id": KADIKOY_THU})

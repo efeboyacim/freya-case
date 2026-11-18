@@ -3,3 +3,5 @@ uvicorn>=0.30
 httpx>=0.27
 pydantic>=2.7
 pytest>=8
+claude-agent-sdk>=0.2.184
+python-dotenv>=1.0
