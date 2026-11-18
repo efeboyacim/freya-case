@@ -9,7 +9,7 @@ Kaynak: [spec.md](spec.md). Aşamalar sırayla yapılır. Bir aşamanın kabul k
 - `POST /admin/fill {slot_id}`: senaryo 6'da yeri arama sürerken doldurmak için.
 - `tool_log`'u servis kendisi yazar: tool'lara karşılık gelen her istek (confirm_name, verify_dob, list_slots, book_appointment, close_call, no_answer) kaydedilir. Transkript yazımı kaydedilmez.
 
-**Durum:** Aşama 1 ✅ bitti · Aşama 2 ✅ bitti · Aşama 3 ⏳ · Aşama 4 ⏳
+**Durum:** Aşama 1 ✅ bitti · Aşama 2 ✅ bitti · Aşama 3 ⏳ · Aşama 3b (opsiyonel) ⏳ · Aşama 4 ⏳
 
 ---
 
@@ -152,16 +152,45 @@ async with CallSession(customer_id, http=None, on_tool=None) as s:
 - **Aşama 1 hatası düzeltildi.** `GET /calls/{id}` yanıtında `appointment.slot_id` alanı randevu id'sini gösteriyordu (`a.id` ile `s.id` çakışıyordu). Bunu yakalayan bir test eklendi.
 - **`CallSession` alanları.** Aşama 3 ve 4 için şu alanları tutuyor: `turn_stats` (LLM süresi), `events` (blok sırası), `init_tools`, `violations`. Senaryo tetikleyicileri için `on_tool` geri çağrısı var.
 - **Git Bash notu.** `/fill 1` komut satırı argümanı olarak verilirse Git Bash onu dosya yoluna çeviriyor. CLI'da stdin üzerinden sorun yok.
+- **R2 kapanışı.** Asistan kendini yalnız açılışta tanıtıyor; "kim arıyor?" sorulsa bile tanıtımı tekrarlamıyor. Telefonu başkası açtıysa gerekçe olarak yalnız "Bu konuyu yalnız <müşteri> ile görüşebiliyorum" diyor. Kart ya da teslimat geçmediği için R1 ve R2 korunuyor. Senaryo 2 üç kez koşuldu, üçünde de tutarlı.
 
-## Aşama 3: Ses (OpenAI)
-- Kod yazmadan önce güncel dokümandan doğrula: STT modeli (`gpt-4o-transcribe`, `language="tr"`), TTS modeli ve ses seçimi (`gpt-4o-mini-tts`).
-- `voice/main.py`: `sounddevice` ile kayıt, Enter'a basınca başlar ve basınca durur. Akış: wav → STT → `session` → TTS → çalma. Ajan tarafı Aşama 2'deki kodla aynı.
+## Aşama 3: Ses (OpenAI) — bas-konuş
+
+**Dokümandan doğrulananlar (2026-11-18, developers.openai.com/api/docs):**
+- STT: `gpt-transcribe`, `/v1/audio/transcriptions` üzerinden. `gpt-4o-transcribe` ve `gpt-4o-mini-transcribe` deprecated.
+- TTS: `gpt-4o-mini-tts`, `/v1/audio/speech` üzerinden. Bu model deprecated ve **6 Ocak 2027'de kapanıyor**. OpenAI'nin önerdiği yerine geçecek model `gpt-realtime-2.1-mini`, ama o bir LLM: `/v1/audio/speech`'i desteklemiyor ve metni birebir okuma garantisi yok. Banka senaryosunda tarih ve saatin yanlış okunması riski olduğu için case'de `gpt-4o-mini-tts` kullanılır, kapanış tarihi README'de not edilir.
+- Ses `marin` ya da `cedar` (dokümanın kalite önerisi). `instructions` ile ton verilir. Düşük gecikme için `response_format="pcm"` ve chunked streaming kullanılır, çalma ilk parçayla başlar.
+- *Kod yazarken doğrulanacak:* dosya API'sinde dil alanının adı (`language="tr"`) ve `prompt` parametresi.
+
+**Tasarım**
+- `voice/main.py`: `sounddevice` ile kayıt, Enter'a basınca başlar ve basınca durur. Endpointing'i kullanıcının tuşa basması yapar, VAD gerekmez. Akış: wav → STT → `session` → TTS → çalma. Ajan tarafı Aşama 2'deki kodla aynı.
+- STT `prompt`'una bağlam verilir: telefonda kart teslimatı, müşteri adı, "doğum tarihi" ifadesi. Doğum tarihinin kendisi ipucu olarak **verilmez**.
+- `requirements.txt` dosyasına `openai` ve `sounddevice` eklenir. `.env.example` dosyasına `OPENAI_API_KEY=` satırı eklenir.
 
 **Kabul kriterleri**
 - [ ] `python -m voice.main --customer 1` ile senaryo 1 mikrofonla baştan sona konuşuluyor ve DB'de `booked` yazılıyor.
 - [ ] Türkçe isimler ve tarihler doğru yazıya dökülüyor. Örnek: "14 Mart 1988" doğrulamayı geçiyor.
-- [ ] Her turun gecikmesi (STT, LLM, TTS ayrı ayrı) terminale basılıyor.
+- [ ] Her turun gecikmesi (STT, LLM, TTS ilk ses baytı ayrı ayrı) terminale basılıyor.
 - [ ] Commit: `stage 3: voice`
+
+## Aşama 3b (opsiyonel, süre kalırsa): Streaming STT, semantic endpointing, streaming TTS
+Spec'teki bas-konuş tasarımının üstüne eklenir, onun yerine geçmez (`--stream` bayrağı). Yapılırsa spec.md'deki `voice` satırına eklenir.
+
+**Dokümandan doğrulananlar (2026-11-18):**
+- Streaming STT: `gpt-live-transcribe`, `wss://api.openai.com/v1/realtime?intent=transcription` üzerinden. `session.update` ile `type: "transcription"`, `audio.input.format` pcm 24 kHz, `transcription: {model, languages: ["tr"], prompt, keywords, delay}` verilir. Kısmi metin `conversation.item.input_audio_transcription.delta` ile, son metin `...completed` ile gelir. Olaylar `item_id` ile eşlenir.
+- `gpt-live-transcribe` sunucu VAD'ını desteklemiyor (`turn_detection: null`). Turu istemci kendisi `input_audio_buffer.commit` ile bitirir. `semantic_vad` speech-to-speech modellerinde var, ama bu modeller Claude'un yerine geçeceği için kullanılmaz.
+
+**Tasarım**
+- Endpointing istemcide yapılır: Silero VAD (`onnxruntime` ile, torch'suz) sessizliği yakalar (~400 ms). Ardından kısmi metne bakılıp cümlenin bitip bitmediğine karar verilir (soru eki, yarım kalan tarih ya da sayı, "şey…" gibi dolgu sözcükleri için kural tabanlı kontrol). Bitmişse `commit` gönderilir, bitmemişse daha uzun bir sessizlik eşiği beklenir.
+- Streaming TTS: Claude'un çıktısı cümle sınırlarından bölünür ve her cümle ayrı bir `gpt-4o-mini-tts` pcm isteğine gider. Çalma sırası korunur.
+- `CallSession`'a cümle cümle yield eden bir `send_stream(text)` eklenir. *Agent SDK'nin kısmi mesaj desteği (`include_partial_messages`) uygularken doğrulanacak.* `send()` aynı kalır, böylece eval etkilenmez.
+- `requirements.txt` dosyasına `websockets` ve `silero-vad` eklenir.
+
+**Kabul kriterleri**
+- [ ] `python -m voice.main --customer 1 --stream` ile senaryo 1 tuşa basmadan konuşuluyor ve DB'de `booked` yazılıyor.
+- [ ] "14 Mart… 1988" gibi araya duraklama giren bir tarih ortadan bölünmüyor.
+- [ ] Gecikme basılıyor: konuşma bitişinden `commit`'e, LLM'in ilk cümlesine ve TTS'in ilk ses baytına kadar. Bas-konuş moduyla karşılaştırma `eval/findings.md` dosyasına not ediliyor.
+- [ ] Commit: `stage 3b: streaming voice`
 
 ## Aşama 4: Eval (simüle müşteriler + DB skoru)
 - `scenarios.py`: 12 senaryo. Her senaryoda customer_id, ön doldurma, persona metni, tetikleyici ve beklenen DB durumu var. Senaryo 6'daki tetikleyici: `list_slots` sonrası `/admin/fill`.
