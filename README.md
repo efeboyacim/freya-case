@@ -57,4 +57,9 @@ Metin modunda, Claude'un müşteriyi oynadığı 12 senaryo × 6 persona (ayrın
 - **Aşama 3b:** streaming STT, semantic endpointing ve streaming TTS yapılmadı. Ses yalnız bas-konuş.
 - **Spec kapsamı dışı:** gerçek telefon hattı, arayüz, adres değişikliği, randevu iptali/değiştirme, gelecek haftanın yerleri, callback'lerin gerçekten aranması, KYC ve auth.
 - **TTS modeli:** `gpt-4o-mini-tts` 6 Ocak 2027'de kapanacak. Yerine önerilen model `/v1/audio/speech`'i desteklemiyor ve metni birebir okuma garantisi vermiyor; tarih ve saat okumada risk olduğu için bu model kullanıldı.
+- **Modelin çıktısını kodla kontrol (planlandı, uygulanmadı):** [docs/llm-improvement.md](docs/llm-improvement.md). Bugün yalnız R7 cümlesi kodla garanti. Plan, geri alınamayan veya riskli adımları prompt'tan koda taşıyor:
+  - **LLM'siz sabit cümleler:** açılış, R8 hatırlatması, yanlış kişi ve kilitlenme vedası şablondan gelir, modelin üretmesi gerekmez (arama nedeninin sızma riski kapanır).
+  - **Kodla kapatma:** müşteri hattı kapatınca doğrulanmamış çağrı `not_verified`, randevulu çağrı `booked` ile LLM'siz kapanır; LLM kapatamazsa kod `no_slot` yazar.
+  - **Tur sırası korumaları (tool katmanında):** yeni `propose_slot` tool'u müşteriye okunan yer ile yazılan `slot_id`'yi aynı kaynağa bağlar. Önerilmemiş ya da onaysız `book_appointment` ile randevu turunda `close_call` reddedilir.
+  - **Neden yapılmadı:** süre yetmedi ve temel eval koşumu önce alınmalıydı; `--variant broken_r5` kanıtı `propose_slot` eklenince geçersizleşir. Plan, eval öncelik tablosuna göre seçilerek uygulanacak şekilde yazıldı.
 - **R7 nedeni:** Yer yokken eklenen sabit cümle "neden" açıklamasının yerini tutmaz; model nedeni söylemeyebilir.
