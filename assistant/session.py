@@ -12,6 +12,7 @@ import shutil
 import tempfile
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx
@@ -50,10 +51,16 @@ class TurnStat:
 
 
 def build_options(customer_name: str, server, *, cwd: str, model: str | None = None,
-                  effort: str | None = None) -> ClaudeAgentOptions:
-    """Yalnız 5 banka tool'u olan, dosya sistemi ayarlarını yüklemeyen ajan ayarları."""
+                  effort: str | None = None,
+                  prompt_transform: Callable[[str], str] | None = None) -> ClaudeAgentOptions:
+    """Yalnız 5 banka tool'u olan, dosya sistemi ayarlarını yüklemeyen ajan ayarları.
+
+    `prompt_transform` yalnız eval'in bozuk prompt varyantları (--variant) içindir."""
+    prompt = build_system_prompt(customer_name)
+    if prompt_transform:
+        prompt = prompt_transform(prompt)
     return ClaudeAgentOptions(
-        system_prompt=build_system_prompt(customer_name),
+        system_prompt=prompt,
         model=model or config.MODEL,
         effort=effort or config.EFFORT,
         tools=[],                                   # yerleşik tool yok
@@ -71,8 +78,10 @@ def build_options(customer_name: str, server, *, cwd: str, model: str | None = N
 class CallSession:
     def __init__(self, customer_id: int, *, http: httpx.AsyncClient | None = None,
                  on_tool: OnTool | None = None, model: str | None = None,
-                 effort: str | None = None, max_customer_turns: int = MAX_CUSTOMER_TURNS):
+                 effort: str | None = None, max_customer_turns: int = MAX_CUSTOMER_TURNS,
+                 prompt_transform: Callable[[str], str] | None = None):
         self.customer_id = customer_id
+        self._prompt_transform = prompt_transform
         self._http = http
         self._own_http = http is None
         self._on_tool = on_tool
@@ -138,7 +147,8 @@ class CallSession:
         server = build_bank_server(self.state, self._http, self._on_tool)
         self._cwd = tempfile.mkdtemp(prefix="freya-call-")
         options = build_options(self.customer_name, server, cwd=self._cwd,
-                                model=self._model, effort=self._effort)
+                                model=self._model, effort=self._effort,
+                                prompt_transform=self._prompt_transform)
         self._client = ClaudeSDKClient(options=options)
         await self._client.connect()
         return await self._turn(OPENING_NOTE)

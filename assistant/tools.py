@@ -23,6 +23,17 @@ OUTCOMES = ["booked", "no_slot", "declined", "not_verified"]
 OnTool = Callable[[str, dict, "int | None", dict], "Awaitable[None] | None"]
 
 
+# close_call sonrası modele dönen talimat: model close_call'ı metinsiz çağırırsa (ör. list_slots
+# boş dönünce) müşteri yine de R7 cümlesini duyar. Aynı turda zaten söylendiyse metin atılır.
+CLOSE_HINTS = {
+    "no_slot": "Arama kapandı. Müşteriye son sözünü şimdi söyle: uygun yer olmadığını ya da "
+               "seçilmediğini kısaca belirt, aynen \"Sizi gelecek hafta arayacağız\" de ve vedalaş. "
+               "Başka tool çağırma.",
+    "declined": "Arama kapandı. Müşteriye kararını not ettiğini ve teslimatın planlanmayacağını söyle, "
+                "vedalaş. Başka tool çağırma.",
+}
+
+
 @dataclass
 class CallState:
     call_id: int
@@ -153,6 +164,9 @@ def build_tools(state: CallState, http: httpx.AsyncClient,
         if status == 200:
             state.closed = True
             state.outcome = body.get("outcome")
+            hint = CLOSE_HINTS.get(state.outcome)
+            if hint:    # bu turda henüz bir şey söylenmediyse müşteri son sözü buradan duyar
+                body = {**body, "next": hint}
         return to_result(status, body)
 
     return [confirm_identity_name, verify_dob, list_slots, book_appointment, close_call]

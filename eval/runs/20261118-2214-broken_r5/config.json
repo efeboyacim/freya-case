@@ -1,0 +1,21 @@
+{
+  "name": "20261118-2214-broken_r5",
+  "model": "claude-sonnet-5-5",
+  "effort": "low",
+  "variant": "broken_r5",
+  "prompt_sha1": "7f8cacc58e",
+  "scenarios": [
+    1,
+    4,
+    10
+  ],
+  "personas": [
+    "isbirlikci",
+    "tek_kelime",
+    "konuskan",
+    "supheci",
+    "kararsiz",
+    "daginik_girdi"
+  ],
+  "reps": 2
+}

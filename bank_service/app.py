@@ -364,6 +364,14 @@ def admin_reset(body: Reset | None = None):
         return {"ok": True}
 
 
+@app.get("/admin/slots")
+def admin_slots():
+    """Eval: tüm yerler ve doluluk (kapasite kontrolü için)."""
+    with db.connection() as conn:
+        return {"slots": [{**slot_dict(r), "capacity": r["capacity"], "booked": r["booked"]}
+                          for r in conn.execute("SELECT * FROM slots ORDER BY id").fetchall()]}
+
+
 @app.post("/admin/fill")
 def admin_fill(body: Fill):
     with db.connection() as conn:

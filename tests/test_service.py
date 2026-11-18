@@ -301,3 +301,11 @@ def test_reset_restores_seed(client):
     assert client.get(f"/calls/{cid}").status_code == 404
     cid = verified_call(client, MEHMET)
     assert len(client.get(f"/calls/{cid}/slots").json()["slots"]) == 2
+
+
+def test_admin_slots_lists_occupancy(client):
+    cid = verified_call(client, AYSE)
+    assert client.post(f"/calls/{cid}/appointments", json={"slot_id": KADIKOY_THU}).status_code == 201
+    slots = {s["slot_id"]: s for s in client.get("/admin/slots").json()["slots"]}
+    assert len(slots) == 5
+    assert slots[KADIKOY_THU]["remaining"] == 0 and slots[KADIKOY_THU]["booked"] == 1

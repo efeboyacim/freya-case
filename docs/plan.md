@@ -9,7 +9,7 @@ Kaynak: [spec.md](spec.md). Aşamalar sırayla yapılır. Bir aşamanın kabul k
 - `POST /admin/fill {slot_id}`: senaryo 6'da yeri arama sürerken doldurmak için.
 - `tool_log`'u servis kendisi yazar: tool'lara karşılık gelen her istek (confirm_name, verify_dob, list_slots, book_appointment, close_call, no_answer) kaydedilir. Transkript yazımı kaydedilmez.
 
-**Durum:** Aşama 1 ✅ bitti · Aşama 2 ✅ bitti · Aşama 3 ✅ bitti · Aşama 3b (opsiyonel) ⏳ · Aşama 4 ⏳
+**Durum:** Aşama 1 ✅ bitti · Aşama 2 ✅ bitti · Aşama 3 ✅ bitti · Aşama 3b (opsiyonel) ⏳ · Aşama 4 ✅ bitti (kısaltılmış koşu)
 
 ---
 
@@ -210,7 +210,7 @@ Spec'teki bas-konuş tasarımının üstüne eklenir, onun yerine geçmez (`--st
 - [ ] Gecikme basılıyor: konuşma bitişinden `commit`'e, LLM'in ilk cümlesine ve TTS'in ilk ses baytına kadar. Bas-konuş moduyla karşılaştırma `eval/findings.md` dosyasına not ediliyor.
 - [ ] Commit: `stage 3b: streaming voice`
 
-## Aşama 4: Eval (simüle müşteriler + DB skoru) ve persona deneyleri
+## Aşama 4: Eval (simüle müşteriler + DB skoru) ve persona deneyleri — ✅ BİTTİ (kısaltılmış koşu)
 
 **Amaç:** Asistanı yazılı modda (`CallSession`, ses yok) farklı personalarla konuşturmak, çıkan hataları toplamak ve **sıklık × zarar** puanına göre sıralamak. Düzeltmeler bu sıraya göre yapılır. Süre kısıtlı olduğu için yeni senaryo eklenmez: spec'teki 12 senaryo × 3 tekrar korunur, persona ekseni tekrarların içine yerleştirilir.
 
@@ -247,8 +247,16 @@ Spec'teki bas-konuş tasarımının üstüne eklenir, onun yerine geçmez (`--st
 **Süre (yaklaşık 60 dk + koşum):** personalar ve senaryolar (10 dk), simülatör (10 dk), kontroller ve hakem (15 dk), run ve klasör çıktısı (15 dk), küçük deneme `--only 1,2,6 --reps 1` (5 dk), tam koşum (36 arama, tahminen 30–40 dk; arka planda çalışırken düzeltmeler incelenir).
 
 **Kabul kriterleri**
-- [ ] `python -m eval.run` tek komutla çalışıyor. Skor tablosunu terminale basıyor ve yukarıdaki sonuç klasörünü oluşturuyor.
-- [ ] Her arama için transkript dosyası var. `summary.md` dosyasında sıklık × zarar ile sıralı hata öncelik tablosu var.
-- [ ] `--variant broken_r5` ile (R5 onay adımı silinmiş prompt) skor düşüyor ve R5 hatası öncelik tablosunda üste çıkıyor. Bu, kontrollerin gerçekten bir şey ölçtüğünü gösteriyor.
-- [ ] En az bir düzeltme turu yapıldı. Önceki ve sonraki öncelik tabloları video için `eval/findings.md` dosyasına not edildi.
-- [ ] Commit: `stage 4: eval`
+- [x] `python -m eval.run` tek komutla çalışıyor, skor tablosunu basıyor ve sonuç klasörünü oluşturuyor. Tam koşu (36 arama) süre nedeniyle **yarıda kesildi**: taban 19 arama (senaryo 1–3 için 3'er, senaryo 4 için 2, geri kalan senaryolar için 1 tekrar). Senaryo 12 LLM'siz.
+- [x] Her aramanın transkripti `transcripts/` altında. `summary.md` içinde `Öncelik | Sıklık | Açıklama` sütunlu, sıklık × zarar ile sıralı hata tablosu var.
+- [x] `--variant broken_r5`: skor %98,9'dan %94,6'ya düştü, R5 hataları tablonun ilk iki satırı oldu (3/6 ve 2/6). Tabanda 0/19.
+- [x] Düzeltme turu yapıldı (fix1, fix2). Önce/sonra tabloları `eval/findings.md` içinde. **R7 düzeltmesi örneklem küçük olduğu için kanıtlanamadı** (taban 0/2, fix1 1/2, fix2 1/6); bulgular ve açık kalanlar orada.
+- [x] Commit: `stage 4: eval`
+
+**Uygulamada verilen ek kararlar:**
+- **Eklenenler:** `GET /admin/slots` (doluluk okuma, kapasite kontrolü için). `run.py --merge a,b,c` paralel koşuların klasörlerini tek `summary.md`'de birleştirir. `CallSession(prompt_transform=...)` yalnız eval varyantları içindir.
+- **Paralel koşu:** Reset global olduğu için her paralel parça kendi servis örneğini (`BANK_DB`, farklı port) ve `BANK_URL`'i kullanır.
+- **R7 kontrolü sonradan eklendi** (hakemin "diğer sorunlar" listesinden çıktı): `close_call`'dan önce söylenmeyen "Sizi gelecek hafta arayacağız".
+- **`close_call` `next` talimatı:** `no_slot` ve `declined` sonucunda tool son sözü modele yazdırır. R7'yi tam kapatmadı.
+- **Hakem** aynı model; zaman zaman kendi notuyla çelişiyor (R6 yanlış alarmı). Önemli bulgular transkriptten elle doğrulandı.
+- **Kapsam:** Yalnız metin; Aşama 3b yapılmadı.

@@ -36,7 +36,7 @@
 | `POST /calls/{id}/appointments {slot_id}` | 201 · 409 slot_full ya da already_booked · 403 · 400 başka ilçe. Kapasite atomik düşer |
 | `POST /calls/{id}/close {outcome}` | Kapalı çağrıya yazılamaz. Randevu var ⇔ `booked`. Callback açar |
 | `POST /calls/{id}/transcript {role, text}` | Konuşma turunu DB'ye yazar |
-| `GET /calls/{id}` · `POST /admin/reset {prefill}` · `POST /admin/fill {slot_id}` | Eval okuması · seed (+ön doldurma) · yeri arama sırasında doldurma |
+| `GET /calls/{id}` · `POST /admin/reset {prefill}` · `POST /admin/fill {slot_id}` · `GET /admin/slots` | Eval okuması · seed (+ön doldurma) · yeri arama sırasında doldurma · doluluk okuma |
 
 ## Tools
 `confirm_identity_name` · `verify_dob` · `list_slots` · `book_appointment` · `close_call`. customer_id oturuma bağlıdır, LLM parametre olarak geçemez. Her tool çağrısını servis kendisi `tool_log` tablosuna yazar, konuşma `transcripts` tablosuna yazılır.
